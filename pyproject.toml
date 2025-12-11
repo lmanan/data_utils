@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data_utils"
+version = "0.1.0"
+description = "Basic utilities for data pre-processing"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Manan Lalit", email = "manan.lalit@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "gdown",
+    "requests",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/lmanan/data_utils"
+Issues = "https://github.com/lmanan/data_utils/issues"
+
+
+
