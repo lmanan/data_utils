@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from pathlib import Path
 from PIL import Image
 
 from data_utils.split_data import split_data, filter_matching_files, get_image_files
@@ -110,7 +109,7 @@ class TestSplitData:
         """Test that consecutive mode produces contiguous blocks."""
         data_dir, project_name, source_name = sample_data
 
-        counts = split_data(
+        split_data(
             data_dir=str(data_dir),
             project_name=project_name,
             source_name=source_name,

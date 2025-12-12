@@ -90,7 +90,6 @@ def filter_matching_files(
 def split_data(
     data_dir: str,
     project_name: str,
-    source_name: str,
     test_fraction: float = 0.15,
     val_fraction: float = 0.15,
     seed: int = 1000,
@@ -108,9 +107,6 @@ def split_data(
         Path where the project lives.
     project_name: str
         Name of the sub-folder under `data_dir`.
-    source_name: str
-        Name of the source sub-directory under `project_name/download`
-        containing the images and masks to split.
     test_fraction: float
         Fraction of total data to reserve for testing.
     val_fraction: float
@@ -129,8 +125,8 @@ def split_data(
     base_path = Path(data_dir) / project_name
 
     # Load source images and masks
-    image_dir = base_path / "download" / source_name / "images"
-    mask_dir = base_path / "download" / source_name / "masks"
+    image_dir = base_path / "images"
+    mask_dir = base_path / "masks"
 
     image_paths, mask_paths = filter_matching_files(
         get_image_files(image_dir),
