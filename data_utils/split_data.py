@@ -139,11 +139,13 @@ def split_data(
 
     indices = np.arange(n_total)
 
-    # Calculate split sizes
-    n_test = int(test_fraction * n_total)
+    # Calculate split sizes (use round to avoid 0 allocations for small datasets)
+    n_test = round(test_fraction * n_total)
     n_trainval = n_total - n_test
-    n_val = int(val_fraction * n_trainval)
+    n_val = round(val_fraction * n_trainval)
     n_train = n_trainval - n_val
+
+    print(f"Split sizes: {n_train} train, {n_val} val, {n_test} test (total: {n_total})")
 
     if consecutive:
         # Consecutive blocks: test first, then val, then train
@@ -168,16 +170,19 @@ def split_data(
                 print(f"Created directory: {path}")
 
     # Save train set
+    print(f"Saving {len(train_indices)} train images...")
     for idx in train_indices:
         load_and_save_as_numpy(image_paths[idx], base_path / "train" / "images")
         load_and_save_as_numpy(mask_paths[idx], base_path / "train" / "masks")
 
     # Save val set
+    print(f"Saving {len(val_indices)} val images...")
     for idx in val_indices:
         load_and_save_as_numpy(image_paths[idx], base_path / "val" / "images")
         load_and_save_as_numpy(mask_paths[idx], base_path / "val" / "masks")
 
     # Save test set
+    print(f"Saving {len(test_indices)} test images...")
     for idx in test_indices:
         load_and_save_as_numpy(image_paths[idx], base_path / "test" / "images")
         load_and_save_as_numpy(mask_paths[idx], base_path / "test" / "masks")
