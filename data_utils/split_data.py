@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List
 
 import numpy as np
+import zarr
 from PIL import Image
 
 SUPPORTED_EXTENSIONS = ("*.tif", "*.tiff", "*.png", "*.jpg", "*.jpeg")
@@ -28,27 +29,56 @@ def get_image_files(directory: Path) -> List[Path]:
     return sorted(files)
 
 
-def load_and_save_as_numpy(src_path: Path, dst_dir: Path) -> Path:
+def load_image(src_path: Path) -> np.ndarray:
     """
-    Loads an image file and saves it as a numpy array.
+    Loads an image file as a numpy array, preserving original dtype.
 
     Parameters
     ----------
     src_path: Path
         Source image file path.
-    dst_dir: Path
-        Destination directory to save the numpy array.
 
     Returns
     -------
-    Path
-        Path to the saved numpy file.
+    np.ndarray
+        Image as numpy array with original dtype.
     """
     img = Image.open(src_path)
-    arr = np.array(img)
-    dst_path = dst_dir / (src_path.stem + ".npy")
-    np.save(dst_path, arr)
-    return dst_path
+    return np.array(img)
+
+
+def to_czyx(img_array: np.ndarray) -> np.ndarray:
+    """
+    Convert image array to C [Z] Y X layout.
+
+    Parameters
+    ----------
+    img_array: np.ndarray
+        Image array with shape (Y, X), (Y, X, C), (Z, Y, X), or (Z, Y, X, C).
+
+    Returns
+    -------
+    np.ndarray
+        Array with shape (C, Y, X) or (C, Z, Y, X).
+    """
+    ndim = img_array.ndim
+
+    if ndim == 2:
+        # (Y, X) -> (C=1, Y, X)
+        return img_array[np.newaxis, ...]
+    elif ndim == 3:
+        # Could be (Z, Y, X) or (Y, X, C)
+        if img_array.shape[-1] in (1, 3, 4):
+            # (Y, X, C) -> (C, Y, X)
+            return np.moveaxis(img_array, -1, 0)
+        else:
+            # (Z, Y, X) -> (C=1, Z, Y, X)
+            return img_array[np.newaxis, ...]
+    elif ndim == 4:
+        # (Z, Y, X, C) -> (C, Z, Y, X)
+        return np.moveaxis(img_array, -1, 0)
+    else:
+        raise ValueError(f"Unsupported array shape: {img_array.shape}")
 
 
 def filter_matching_files(
@@ -145,7 +175,9 @@ def split_data(
     n_val = round(val_fraction * n_trainval)
     n_train = n_trainval - n_val
 
-    print(f"Split sizes: {n_train} train, {n_val} val, {n_test} test (total: {n_total})")
+    print(
+        f"Split sizes: {n_train} train, {n_val} val, {n_test} test (total: {n_total})"
+    )
 
     if consecutive:
         # Consecutive blocks: test first, then val, then train
@@ -160,37 +192,67 @@ def split_data(
         val_indices = indices[n_test : n_test + n_val]
         train_indices = indices[n_test + n_val :]
 
-    # Create output directories
-    splits = ["train", "val", "test"]
-    for split in splits:
-        for subdir in ["images", "masks"]:
-            path = base_path / split / subdir
-            if not path.exists():
-                path.mkdir(parents=True)
-                print(f"Created directory: {path}")
+    # Load first image and mask to determine shapes and dtypes
+    # Convert to C [Z] Y X layout to get final shape
+    sample_image = to_czyx(load_image(image_paths[0]))
+    sample_mask = to_czyx(load_image(mask_paths[0]))
+    # Shape is (C, [Z,] Y, X) - we'll insert T as second dimension
+    image_czyx_shape = sample_image.shape  # (C, [Z,] Y, X)
+    mask_czyx_shape = sample_mask.shape
+    image_dtype = sample_image.dtype
+    mask_dtype = sample_mask.dtype
 
-    # Save train set
-    print(f"Saving {len(train_indices)} train images...")
-    for idx in train_indices:
-        load_and_save_as_numpy(image_paths[idx], base_path / "train" / "images")
-        load_and_save_as_numpy(mask_paths[idx], base_path / "train" / "masks")
+    # Create zarr container
+    zarr_path = base_path / "data.zarr"
+    root = zarr.open(str(zarr_path), mode="w")
 
-    # Save val set
-    print(f"Saving {len(val_indices)} val images...")
-    for idx in val_indices:
-        load_and_save_as_numpy(image_paths[idx], base_path / "val" / "images")
-        load_and_save_as_numpy(mask_paths[idx], base_path / "val" / "masks")
+    # Create groups and arrays for each split
+    split_data_map = {
+        "train": train_indices,
+        "val": val_indices,
+        "test": test_indices,
+    }
 
-    # Save test set
-    print(f"Saving {len(test_indices)} test images...")
-    for idx in test_indices:
-        load_and_save_as_numpy(image_paths[idx], base_path / "test" / "images")
-        load_and_save_as_numpy(mask_paths[idx], base_path / "test" / "masks")
+    for split_name, split_indices in split_data_map.items():
+        n_split = len(split_indices)
+        if n_split == 0:
+            continue
+
+        split_group = root.create_group(split_name)
+
+        # Shape: (C, T, [Z,] Y, X) - insert T after C
+        image_shape = (image_czyx_shape[0], n_split) + image_czyx_shape[1:]
+        mask_shape = (mask_czyx_shape[0], n_split) + mask_czyx_shape[1:]
+
+        # Chunks: (1, 1, [Z,] Y, X) - chunk size 1 for C and T
+        image_chunks = (1, 1) + image_czyx_shape[1:]
+        mask_chunks = (1, 1) + mask_czyx_shape[1:]
+
+        images_array = split_group.create_dataset(
+            "images",
+            shape=image_shape,
+            dtype=image_dtype,
+            chunks=image_chunks,
+        )
+        masks_array = split_group.create_dataset(
+            "masks",
+            shape=mask_shape,
+            dtype=mask_dtype,
+            chunks=mask_chunks,
+        )
+
+        print(f"Saving {n_split} {split_name} images...")
+        for i, idx in enumerate(split_indices):
+            img = to_czyx(load_image(image_paths[idx]))
+            mask = to_czyx(load_image(mask_paths[idx]))
+            # Write to position [:, i, ...] (all channels, time index i)
+            images_array[:, i, ...] = img
+            masks_array[:, i, ...] = mask
 
     counts = {"train": n_train, "val": n_val, "test": n_test}
     print(
         f"Split complete: {n_train} train, {n_val} val, {n_test} test "
-        f"(total: {n_total}) saved as numpy arrays to {base_path}"
+        f"(total: {n_total}) saved to zarr container at {zarr_path}"
     )
 
     return counts
