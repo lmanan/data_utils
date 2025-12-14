@@ -3,7 +3,6 @@ from typing import List
 
 import numpy as np
 import zarr
-from numcodecs import Blosc
 from PIL import Image
 
 SUPPORTED_EXTENSIONS = ("*.tif", "*.tiff", "*.png", "*.jpg", "*.jpeg")
@@ -231,21 +230,17 @@ def split_data(
         image_chunks = (1, 1) + image_czyx_shape[1:]
         mask_chunks = (1, 1) + mask_czyx_shape[1:]
 
-        compressor = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE)
-
         images_array = split_group.create_dataset(
             "images",
             shape=image_shape,
             dtype=image_dtype,
             chunks=image_chunks,
-            compressor=compressor,
         )
         masks_array = split_group.create_dataset(
             "masks",
             shape=mask_shape,
             dtype=mask_dtype,
             chunks=mask_chunks,
-            compressor=compressor,
         )
 
         print(f"Saving {n_split} {split_name} images...")
