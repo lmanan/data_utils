@@ -47,7 +47,7 @@ def load_image(src_path: Path) -> np.ndarray:
     return np.array(img)
 
 
-def to_czyx(img_array: np.ndarray) -> np.ndarray:
+def to_czyx(img_array: np.ndarray) -> tuple[np.ndarray, tuple]:
     """
     Convert image array to C [Z] Y X layout.
 
@@ -58,7 +58,7 @@ def to_czyx(img_array: np.ndarray) -> np.ndarray:
 
     Returns
     -------
-    np.ndarray
+    tuple(np.ndarray, tuple)
         Array with shape (C, Y, X) or (C, Z, Y, X).
     """
     ndim = img_array.ndim
@@ -245,8 +245,8 @@ def split_data(
 
         print(f"Saving {n_split} {split_name} images...")
         for i, idx in enumerate(split_indices):
-            img = to_czyx(load_image(image_paths[idx]))
-            mask = to_czyx(load_image(mask_paths[idx]))
+            img, _ = to_czyx(load_image(image_paths[idx]))
+            mask, _ = to_czyx(load_image(mask_paths[idx]))
             # Write to position [:, i, ...] (all channels, time index i)
             images_array[:, i, ...] = img
             masks_array[:, i, ...] = mask
