@@ -65,18 +65,18 @@ def to_czyx(img_array: np.ndarray) -> tuple[np.ndarray, tuple]:
 
     if ndim == 2:
         # (Y, X) -> (C=1, Y, X)
-        return img_array[np.newaxis, ...], ("c, y, x")
+        return img_array[np.newaxis, ...], ("c", "y", "x")
     elif ndim == 3:
         # Could be (Z, Y, X) or (Y, X, C)
         if img_array.shape[-1] in (1, 3, 4):
             # (Y, X, C) -> (C, Y, X)
-            return np.moveaxis(img_array, -1, 0), ("c, y, x")
+            return np.moveaxis(img_array, -1, 0), ("c", "y", "x")
         else:
             # (Z, Y, X) -> (C=1, Z, Y, X)
-            return img_array[np.newaxis, ...], ("c, z, y, x")
+            return img_array[np.newaxis, ...], ("c", "z", "y", "x")
     elif ndim == 4:
         # (Z, Y, X, C) -> (C, Z, Y, X)
-        return np.moveaxis(img_array, -1, 0), ("c, z, y, x")
+        return np.moveaxis(img_array, -1, 0), ("c", "z", "y", "x")
     else:
         raise ValueError(f"Unsupported array shape: {img_array.shape}")
 
@@ -197,6 +197,8 @@ def split_data(
     sample_image, image_axis_names = to_czyx(load_image(image_paths[0]))
     sample_mask, mask_axis_names = to_czyx(load_image(mask_paths[0]))
     # Shape is (C, [Z,] Y, X) - we'll insert T as second dimension
+    image_axis_names = ("c", "t") + image_axis_names[1:]
+    mask_axis_names = ("c", "t") + mask_axis_names[1:]
     image_czyx_shape = sample_image.shape  # (C, [Z,] Y, X)
     mask_czyx_shape = sample_mask.shape
     image_dtype = sample_image.dtype
