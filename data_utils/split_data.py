@@ -65,18 +65,18 @@ def to_czyx(img_array: np.ndarray) -> np.ndarray:
 
     if ndim == 2:
         # (Y, X) -> (C=1, Y, X)
-        return img_array[np.newaxis, ...]
+        return img_array[np.newaxis, ...], ("c, y, x")
     elif ndim == 3:
         # Could be (Z, Y, X) or (Y, X, C)
         if img_array.shape[-1] in (1, 3, 4):
             # (Y, X, C) -> (C, Y, X)
-            return np.moveaxis(img_array, -1, 0)
+            return np.moveaxis(img_array, -1, 0), ("c, y, x")
         else:
             # (Z, Y, X) -> (C=1, Z, Y, X)
-            return img_array[np.newaxis, ...]
+            return img_array[np.newaxis, ...], ("c, z, y, x")
     elif ndim == 4:
         # (Z, Y, X, C) -> (C, Z, Y, X)
-        return np.moveaxis(img_array, -1, 0)
+        return np.moveaxis(img_array, -1, 0), ("c, z, y, x")
     else:
         raise ValueError(f"Unsupported array shape: {img_array.shape}")
 
@@ -194,13 +194,15 @@ def split_data(
 
     # Load first image and mask to determine shapes and dtypes
     # Convert to C [Z] Y X layout to get final shape
-    sample_image = to_czyx(load_image(image_paths[0]))
-    sample_mask = to_czyx(load_image(mask_paths[0]))
+    sample_image, image_axis_names = to_czyx(load_image(image_paths[0]))
+    sample_mask, mask_axis_names = to_czyx(load_image(mask_paths[0]))
     # Shape is (C, [Z,] Y, X) - we'll insert T as second dimension
     image_czyx_shape = sample_image.shape  # (C, [Z,] Y, X)
     mask_czyx_shape = sample_mask.shape
     image_dtype = sample_image.dtype
     mask_dtype = sample_mask.dtype
+
+    print("image dtype:", image_dtype, "mask dtype:", mask_dtype)
 
     # Create zarr container
     zarr_path = base_path / "data.zarr"
@@ -248,6 +250,21 @@ def split_data(
             # Write to position [:, i, ...] (all channels, time index i)
             images_array[:, i, ...] = img
             masks_array[:, i, ...] = mask
+
+        split_group["images"].attrs.update(
+            {
+                "resolution": (1,) * (len(image_axis_names) - 1),
+                "offset": (0,) * (len(image_axis_names) - 1),
+                "axis_names": image_axis_names,
+            }
+        )
+        split_group["masks"].attrs.update(
+            {
+                "resolution": (1,) * (len(mask_axis_names) - 1),
+                "offset": (0,) * (len(mask_axis_names) - 1),
+                "axis_names": mask_axis_names,
+            }
+        )
 
     counts = {"train": n_train, "val": n_val, "test": n_test}
     print(
