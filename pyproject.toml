@@ -15,6 +15,7 @@ dependencies = [
     "gdown",
     "requests",
     "pillow", # PIL
+    "zarr"
 ]
 
 [project.optional-dependencies]
