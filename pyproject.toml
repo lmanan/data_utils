@@ -14,8 +14,10 @@ dependencies = [
     "numpy",
     "gdown",
     "requests",
-    "pillow", # PIL
-    "zarr"
+    "pillow",
+    "pyyaml",
+    "zarr",
+    "scikit-image",
 ]
 
 [project.optional-dependencies]
