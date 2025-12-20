@@ -47,7 +47,7 @@ def download_with_gdown(zip_url: str, output_zip: Path) -> None:
     gdown.download(zip_url, str(output_zip), quiet=False)
 
 
-def extract_data(zip_url: str, data_dir: str) -> None:
+def extract_data(zip_url: str, data_dir: str, remove_zip: bool = True) -> None:
     """
     Downloads and extracts a zip file from:
       - Google Drive (via gdown)
@@ -59,6 +59,8 @@ def extract_data(zip_url: str, data_dir: str) -> None:
         Google Drive file ID / URL OR any HTTP(S) URL of the zip file.
     data_dir : str
         Path to the directory where data will be stored.
+    remove_zip : bool
+        If True, removes the downloaded zip file after extraction.
 
     Returns
     -------
@@ -87,6 +89,9 @@ def extract_data(zip_url: str, data_dir: str) -> None:
         with ZipFile(output_zip, "r") as zfile:
             zfile.extractall(target_path)
 
+        if remove_zip:
+            output_zip.unlink()
+
         logging.info(f"Downloaded and extracted data to {target_path}")
 
     except Exception as e:
@@ -109,9 +114,14 @@ def main():
         default="./data",
         help="Directory where data will be stored (default: ./data)",
     )
+    parser.add_argument(
+        "--keep-zip",
+        action="store_true",
+        help="Keep the downloaded zip file after extraction (default: remove it)",
+    )
 
     args = parser.parse_args()
-    extract_data(args.zip_url, args.data_dir)
+    extract_data(args.zip_url, args.data_dir, remove_zip=not args.keep_zip)
 
 
 if __name__ == "__main__":
