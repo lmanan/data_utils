@@ -165,12 +165,14 @@ def create_zarr(
         img_ds = seq_grp.create_dataset(
             "img",
             shape=zarr_shape,
+            chunks=(1, 1, *spatial_shape),
             dtype=img_dtype,
             overwrite=True,
         )
         mask_ds = seq_grp.create_dataset(
             "mask",
             shape=mask_zarr_shape,
+            chunks=(1, 1, *spatial_shape),
             dtype=np.uint32,
             overwrite=True,
         )
