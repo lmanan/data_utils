@@ -32,7 +32,12 @@ def load_csv_data(
     if voxel_size is None:
         voxel_size = {"x": 1.0, "y": 1.0}
 
-    dtype = [
+    # Read header to determine which columns exist
+    with open(csv_file_name, "r", encoding="utf-8") as f:
+        header = f.readline().strip().split(delimiter)
+
+    # Define expected columns and their types
+    expected_cols = [
         ("sequence", "U20"),  # force Unicode string
         ("id", "i4"),
         ("t", "i4"),
@@ -42,10 +47,20 @@ def load_csv_data(
         ("original_id", "i4"),
     ]
     if "z" in voxel_size:
-        dtype.insert(3, ("z", "f8"))
+        expected_cols.insert(3, ("z", "f8"))
+
+    # Filter to only columns that exist in the file, preserving order
+    expected_names = [col[0] for col in expected_cols]
+    usecols = [i for i, name in enumerate(header) if name in expected_names]
+    dtype = [col for col in expected_cols if col[0] in header]
 
     data = np.genfromtxt(
-        csv_file_name, delimiter=delimiter, names=True, dtype=dtype, encoding="utf-8"
+        csv_file_name,
+        delimiter=delimiter,
+        names=True,
+        dtype=dtype,
+        encoding="utf-8",
+        usecols=usecols,
     )
 
     if sequences is not None:
