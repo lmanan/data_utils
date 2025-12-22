@@ -90,10 +90,13 @@ def load_csv_data(
     if has_names and "z" in colnames and "z" in voxel_size:
         data["z"] *= voxel_size["z"]
 
-    # Define numeric columns dynamically
-    numerical_cols = ["id", "t", "y", "x", "parent_id"]
+    # Define numeric columns dynamically (only include columns that exist)
+    base_numerical_cols = ["id", "t", "y", "x"]
     if has_names and "z" in colnames:
-        numerical_cols.insert(2, "z")  # Insert "z" at correct position
+        base_numerical_cols.insert(2, "z")  # Insert "z" at correct position
+    if has_names and "parent_id" in colnames:
+        base_numerical_cols.append("parent_id")
+    numerical_cols = base_numerical_cols
 
     # Stack numeric data
     numerical_data = np.column_stack([data[col] for col in numerical_cols])
