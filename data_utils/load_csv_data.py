@@ -90,16 +90,22 @@ def load_csv_data(
     if has_names and "z" in colnames and "z" in voxel_size:
         data["z"] *= voxel_size["z"]
 
-    # Define numeric columns dynamically (only include columns that exist)
-    base_numerical_cols = ["id", "t", "y", "x"]
+    # Define numeric columns dynamically
+    numerical_cols = ["id", "t", "y", "x", "parent_id"]
     if has_names and "z" in colnames:
-        base_numerical_cols.insert(2, "z")  # Insert "z" at correct position
-    if has_names and "parent_id" in colnames:
-        base_numerical_cols.append("parent_id")
-    numerical_cols = base_numerical_cols
+        numerical_cols.insert(2, "z")  # Insert "z" at correct position
+
+    # Handle missing parent_id column - default to -1 for all rows
+    has_parent_id = has_names and "parent_id" in colnames
 
     # Stack numeric data
-    numerical_data = np.column_stack([data[col] for col in numerical_cols])
+    numeric_arrays = []
+    for col in numerical_cols:
+        if col == "parent_id" and not has_parent_id:
+            numeric_arrays.append(np.full(len(data), -1, dtype=np.int32))
+        else:
+            numeric_arrays.append(data[col])
+    numerical_data = np.column_stack(numeric_arrays)
     sequence_data = data["sequence"]
 
     # Mapping from id to original_id (if exists)
@@ -117,3 +123,4 @@ def load_csv_data(
         reverse_mapping = {}
 
     return numerical_data, sequence_data, mapping, reverse_mapping
+
