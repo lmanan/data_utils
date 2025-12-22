@@ -34,7 +34,13 @@ def load_csv_data(
 
     # Read header to determine which columns exist
     with open(csv_file_name, "r", encoding="utf-8") as f:
-        header = f.readline().strip().split(delimiter)
+        header_line = f.readline().strip()
+        # Handle headers that start with '# ' (common in some CSV formats)
+        if header_line.startswith("# "):
+            header_line = header_line[2:]
+        elif header_line.startswith("#"):
+            header_line = header_line[1:]
+        header = header_line.split(delimiter)
 
     # Define expected columns and their types
     expected_cols = [
@@ -54,13 +60,18 @@ def load_csv_data(
     usecols = [i for i, name in enumerate(header) if name in expected_names]
     dtype = [col for col in expected_cols if col[0] in header]
 
+    # Extract column names from dtype for explicit naming
+    col_names = [col[0] for col in dtype]
+
     data = np.genfromtxt(
         csv_file_name,
         delimiter=delimiter,
-        names=True,
+        skip_header=1,
+        names=col_names,
         dtype=dtype,
         encoding="utf-8",
         usecols=usecols,
+        comments=None,  # Disable comment handling to support headers starting with #
     )
 
     if sequences is not None:
