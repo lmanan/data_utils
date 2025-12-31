@@ -123,4 +123,3 @@ def load_csv_data(
         reverse_mapping = {}
 
     return numerical_data, sequence_data, mapping, reverse_mapping
-
