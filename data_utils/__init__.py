@@ -10,3 +10,4 @@ from data_utils.load_csv_edge_attribute import (
 from data_utils.load_csv_node_attribute import (
     load_csv_node_attribute as load_csv_node_attribute,
 )
+from data_utils.correct_gt_with_st import correct_gt_with_st as correct_gt_with_st

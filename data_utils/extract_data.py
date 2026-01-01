@@ -5,6 +5,7 @@ from zipfile import ZipFile
 
 import requests
 import gdown
+from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO)
 
@@ -32,10 +33,23 @@ def download_with_requests(url: str, output_zip: Path) -> None:
     response = requests.get(url, stream=True)
     response.raise_for_status()
 
-    with output_zip.open("wb") as f:
+    total_size = int(response.headers.get("content-length", 0))
+
+    with (
+        output_zip.open("wb") as f,
+        tqdm(
+            total=total_size,
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+            desc="Downloading",
+            disable=total_size == 0,
+        ) as pbar,
+    ):
         for chunk in response.iter_content(chunk_size=8192):
             if chunk:
                 f.write(chunk)
+                pbar.update(len(chunk))
 
 
 def download_with_gdown(zip_url: str, output_zip: Path) -> None:
@@ -47,7 +61,9 @@ def download_with_gdown(zip_url: str, output_zip: Path) -> None:
     gdown.download(zip_url, str(output_zip), quiet=False)
 
 
-def extract_data(zip_url: str, data_dir: str, remove_zip: bool = True) -> None:
+def extract_data(
+    zip_url: str, data_dir: str, project_name: str, remove_zip: bool = True
+) -> None:
     """
     Downloads and extracts a zip file from:
       - Google Drive (via gdown)
@@ -59,6 +75,9 @@ def extract_data(zip_url: str, data_dir: str, remove_zip: bool = True) -> None:
         Google Drive file ID / URL OR any HTTP(S) URL of the zip file.
     data_dir : str
         Path to the directory where data will be stored.
+    project_name : str
+        Name of the project. If a directory with this name exists within data_dir,
+        the download will be skipped.
     remove_zip : bool
         If True, removes the downloaded zip file after extraction.
 
@@ -67,9 +86,10 @@ def extract_data(zip_url: str, data_dir: str, remove_zip: bool = True) -> None:
     None
     """
     target_path = Path(data_dir)
+    project_path = target_path / project_name
 
-    if target_path.exists():
-        logging.info(f"Directory already exists at {target_path}")
+    if project_path.exists():
+        logging.info(f"Project directory already exists at {project_path}")
         return
 
     target_path.mkdir(parents=True, exist_ok=True)
@@ -115,13 +135,21 @@ def main():
         help="Directory where data will be stored (default: ./data)",
     )
     parser.add_argument(
+        "--project_name",
+        type=str,
+        required=True,
+        help="Name of the project. If this directory exists within data_dir, download is skipped.",
+    )
+    parser.add_argument(
         "--keep-zip",
         action="store_true",
         help="Keep the downloaded zip file after extraction (default: remove it)",
     )
 
     args = parser.parse_args()
-    extract_data(args.zip_url, args.data_dir, remove_zip=not args.keep_zip)
+    extract_data(
+        args.zip_url, args.data_dir, args.project_name, remove_zip=not args.keep_zip
+    )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import zarr
-from PIL import Image
+from skimage.io import imread
 
 from data_utils.image_utils import get_image_files
 
@@ -141,7 +141,7 @@ def create_zarr(
             continue
 
         # Read first frame to determine shape and dtype
-        sample_img = np.array(Image.open(image_fns[0]))
+        sample_img = imread(image_fns[0])
         sample_img_cyx, spatial_axes = _to_cyx(sample_img)
 
         num_channels = sample_img_cyx.shape[0]
@@ -183,8 +183,8 @@ def create_zarr(
         unique_labels_after = set()
 
         for t, (im_fn, ma_fn) in enumerate(zip(image_fns, mask_fns)):
-            img = np.array(Image.open(im_fn))
-            mask = np.array(Image.open(ma_fn)).astype(np.uint32)
+            img = imread(im_fn)
+            mask = imread(ma_fn).astype(np.uint32)
 
             # Convert image to (C, [Z], Y, X) format
             img_cyx, _ = _to_cyx(img)

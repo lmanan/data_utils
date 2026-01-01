@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import yaml
-from PIL import Image
+from skimage.io import imread
 from skimage.measure import regionprops
 
 from data_utils.image_utils import get_image_files
@@ -81,7 +81,7 @@ def create_csv(
         for time in range(num_frames):
             mapping[time] = {}
             reverse_mapping[time] = {}
-            mask = np.array(Image.open(mask_file_names[time]))
+            mask = imread(mask_file_names[time])
             detections = regionprops(mask)
             for detection in detections:
                 if unique_ids:
@@ -98,7 +98,7 @@ def create_csv(
                 id_, time_start, time_end, parent_id = row.astype(int)
                 daughter_parent_mapping[id_] = ([], parent_id)
                 for time in range(time_start, time_end + 1):
-                    mask = np.array(Image.open(mask_file_names[time]))
+                    mask = imread(mask_file_names[time])
                     if np.any(mask == id_):
                         daughter_parent_mapping[id_][0].append(time)
 

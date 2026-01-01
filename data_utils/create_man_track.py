@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 import numpy as np
-from PIL import Image
+from skimage.io import imread
 
 from data_utils.image_utils import get_image_files
 
@@ -69,7 +69,7 @@ def create_man_track(
 
         logger.info("Processing masks...")
         for time in range(num_frames):
-            mask = np.array(Image.open(mask_file_names[time]))
+            mask = imread(mask_file_names[time])
             unique_labels: Set[int] = set(np.unique(mask))
             unique_labels.discard(0)  # Remove background
 

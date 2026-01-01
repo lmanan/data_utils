@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from PIL import Image
+from skimage.io import imsave
 
 from data_utils.split_data import split_data, filter_matching_files, get_image_files
 
@@ -18,13 +18,11 @@ def sample_data(tmp_path):
     for i in range(20):
         # Create random image (64x64 RGB)
         img_arr = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
-        img = Image.fromarray(img_arr)
-        img.save(image_dir / f"frame_{i:03d}.png")
+        imsave(image_dir / f"frame_{i:03d}.png", img_arr)
 
         # Create corresponding mask (64x64 grayscale)
         mask_arr = np.random.randint(0, 5, (64, 64), dtype=np.uint8)
-        mask = Image.fromarray(mask_arr)
-        mask.save(mask_dir / f"frame_{i:03d}.png")
+        imsave(mask_dir / f"frame_{i:03d}.png", mask_arr)
 
     return tmp_path, "test_project", "all_data"
 
