@@ -14,10 +14,11 @@ dependencies = [
     "numpy",
     "gdown",
     "requests",
-    "pillow",
     "pyyaml",
     "zarr",
     "scikit-image",
+    "tqdm",
+    "imagecodecs" # loading CTC data
 ]
 
 [project.optional-dependencies]
