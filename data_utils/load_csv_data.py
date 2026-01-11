@@ -52,7 +52,7 @@ def load_csv_data(
         ("parent_id", "i4"),
         ("original_id", "i4"),
     ]
-    if "z" in voxel_size:
+    if "z" in header:
         expected_cols.insert(3, ("z", "f8"))
 
     # Filter to only columns that exist in the file, preserving order
