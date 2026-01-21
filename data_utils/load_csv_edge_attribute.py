@@ -15,16 +15,14 @@ def load_csv_edge_attribute(
 
     Returns:
         tuple[np.ndarray, np.ndarray]:
-            - edge_attribute_data: Structured array with columns (id_u, t_u, id_v, t_v, attribute_name).
+            - edge_attribute_data: Structured array with columns (id_u, id_v, attribute_name).
             - sequence_data: 1D array of sequence names (dtype str).
     """
     dtype = np.dtype(
         [
             ("sequence", "U20"),
             ("id_u", "i8"),
-            ("t_u", "i8"),
             ("id_v", "i8"),
-            ("t_v", "i8"),
             (attribute_name, "f8"),
         ]
     )
@@ -51,9 +49,7 @@ def load_csv_edge_attribute(
     new_dtype = np.dtype(
         [
             ("id_u", "i8"),
-            ("t_u", "i8"),
             ("id_v", "i8"),
-            ("t_v", "i8"),
             (attribute_name, "f8"),
         ]
     )
