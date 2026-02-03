@@ -2,14 +2,17 @@ import numpy as np
 
 
 def load_csv_edge_attribute(
-    edge_attribute_file_name, attribute_name: str, delimiter=" ", sequences=None
+    edge_attribute_file_name, attribute_name: str, sequences=None
 ):
     """Load edge attribute CSV and optionally filter by one or more sequences.
+
+    Supports files with columns ``sequence id_u id_v attribute`` or
+    ``sequence id_u t_u id_v t_v attribute``.  When ``t_u`` / ``t_v``
+    columns are present they are silently dropped.
 
     Args:
         edge_attribute_file_name (str | Path): Path to the edge attribute file.
         attribute_name (str): Name for the attribute column in the returned array.
-        delimiter (str): Field delimiter. Defaults to ' '.
         sequences (list[str] | None): List of sequence names to keep.
             If None, all sequences are returned.
 
@@ -18,14 +21,32 @@ def load_csv_edge_attribute(
             - edge_attribute_data: Structured array with columns (id_u, id_v, attribute_name).
             - sequence_data: 1D array of sequence names (dtype str).
     """
-    dtype = np.dtype(
-        [
-            ("sequence", "U20"),
-            ("id_u", "i8"),
-            ("id_v", "i8"),
-            (attribute_name, "f8"),
-        ]
-    )
+    # Peek at the header to determine which columns are present.
+    with open(edge_attribute_file_name, "r") as f:
+        header_cols = f.readline().strip().split()
+
+    has_timestamps = "t_u" in header_cols and "t_v" in header_cols
+
+    if has_timestamps:
+        dtype = np.dtype(
+            [
+                ("sequence", "U20"),
+                ("id_u", "i8"),
+                ("t_u", "f8"),
+                ("id_v", "i8"),
+                ("t_v", "f8"),
+                (attribute_name, "f8"),
+            ]
+        )
+    else:
+        dtype = np.dtype(
+            [
+                ("sequence", "U20"),
+                ("id_u", "i8"),
+                ("id_v", "i8"),
+                (attribute_name, "f8"),
+            ]
+        )
 
     edge_attribute_data = np.genfromtxt(
         edge_attribute_file_name,
