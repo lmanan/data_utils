@@ -7,7 +7,7 @@ import requests
 import gdown
 from tqdm import tqdm
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def is_google_drive_resource(zip_url: str) -> bool:
@@ -29,7 +29,7 @@ def download_with_requests(url: str, output_zip: Path) -> None:
     if "dropbox.com" in url:
         url = url.replace("dl=0", "dl=1")
 
-    logging.info(f"Downloading from URL with requests: {url}")
+    logger.info(f"Downloading from URL with requests: {url}")
     response = requests.get(url, stream=True)
     response.raise_for_status()
 
@@ -56,7 +56,7 @@ def download_with_gdown(zip_url: str, output_zip: Path) -> None:
     """
     Download from Google Drive using gdown (URL or file ID).
     """
-    logging.info(f"Downloading from Google Drive with gdown: {zip_url}")
+    logger.info(f"Downloading from Google Drive with gdown: {zip_url}")
     # gdown supports both URL and file ID
     gdown.download(zip_url, str(output_zip), quiet=False)
 
@@ -89,11 +89,11 @@ def extract_data(
     project_path = target_path / project_name
 
     if project_path.exists():
-        logging.info(f"Project directory already exists at {project_path}")
+        logger.info(f"Project directory already exists at {project_path}")
         return
 
     target_path.mkdir(parents=True, exist_ok=True)
-    logging.info(f"Created directory {target_path}")
+    logger.info(f"Created directory {target_path}")
 
     output_zip = target_path / "data.zip"
 
@@ -105,17 +105,17 @@ def extract_data(
             download_with_requests(zip_url, output_zip)
 
         # Extract zip
-        logging.info(f"Extracting {output_zip} ...")
+        logger.info(f"Extracting {output_zip} ...")
         with ZipFile(output_zip, "r") as zfile:
             zfile.extractall(target_path)
 
         if remove_zip:
             output_zip.unlink()
 
-        logging.info(f"Downloaded and extracted data to {target_path}")
+        logger.info(f"Downloaded and extracted data to {target_path}")
 
     except Exception as e:
-        logging.error(f"Failed to download or extract data: {e}")
+        logger.error(f"Failed to download or extract data: {e}")
 
 
 def main():

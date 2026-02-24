@@ -20,10 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def create_csv(
-    mask_dir_names: List[str],
     sequence_names: List[str],
-    man_track_file_names: Optional[List[str]],
-    output_csv_file_name: str,
+    detections_csv_file_name: str,
+    mask_dir_names: Optional[List[str]] = None,
+    zarr_container: Optional[str] = None,
+    man_track_file_names: Optional[List[str]] = None,
     unique_ids: bool = True,
 ) -> None:
     """
@@ -35,31 +36,52 @@ def create_csv(
     The CSV file provides an ID for each segmentation, with 7 or 8 columns:
     `sequence id time [z] y x parent_id original_id`.
 
+    Masks can be provided either as image directories (via `mask_dir_names`) or
+    as a zarr container (via `zarr_container`). Exactly one must be specified.
+
     Parameters
     ----------
-    mask_dir_names : List[str]
-        List of directories containing segmentation masks.
-        Supported formats: tif, tiff, png, jpg, jpeg.
     sequence_names : List[str]
         List of sequence names corresponding to each mask directory.
+        When using `zarr_container`, these are the group names within the container.
     man_track_file_names : List[str] | None
         TXT files with CTC-style 4 columns (track_id time_start time_end parent_track_id).
         If not provided, parent id will be set to -1.
-    output_csv_file_name : str
+    detections_csv_file_name : str
         Output CSV filename with segmentation IDs and parent IDs.
         Columns are [sequence id t [z] y x parent_id original_id].
+    mask_dir_names : List[str] | None
+        List of directories containing segmentation masks.
+        Supported formats: tif, tiff, png, jpg, jpeg.
+    zarr_container : str | None
+        Path to a zarr container. Each `sequence_name` is a group within the
+        container, and each group must contain a dataset called 'mask'.
     unique_ids : bool
         If True, assigns unique IDs across the entire dataset (starting from 1).
         If False, preserves the original label IDs from the masks.
 
     """
 
+    assert (mask_dir_names is None) != (
+        zarr_container is None
+    ), "Exactly one of `mask_dir_names` or `zarr_container` must be provided."
+
+    if zarr_container is not None:
+        import zarr
+
+        store = zarr.open(zarr_container, mode="r")
+
     all_data: List[List[Union[str, int, float]]] = []
     for seq_index in range(len(sequence_names)):
         sequence_name = sequence_names[seq_index]
-        mask_dir_name = mask_dir_names[seq_index]
-        mask_file_names = get_image_files(Path(mask_dir_name))
-        num_frames = len(mask_file_names)
+
+        if zarr_container is not None:
+            mask_array = store[sequence_name]["mask"]
+            num_frames = mask_array.shape[1]
+        else:
+            mask_dir_name = mask_dir_names[seq_index]
+            mask_file_names = get_image_files(Path(mask_dir_name))
+            num_frames = len(mask_file_names)
         track_data: Optional[np.ndarray] = None
 
         if man_track_file_names is not None:
@@ -81,7 +103,10 @@ def create_csv(
         for time in range(num_frames):
             mapping[time] = {}
             reverse_mapping[time] = {}
-            mask = imread(mask_file_names[time])
+            if zarr_container is not None:
+                mask = np.array(mask_array[0, time])
+            else:
+                mask = imread(mask_file_names[time])
             detections = regionprops(mask)
             for detection in detections:
                 if unique_ids:
@@ -98,7 +123,10 @@ def create_csv(
                 id_, time_start, time_end, parent_id = row.astype(int)
                 daughter_parent_mapping[id_] = ([], parent_id)
                 for time in range(time_start, time_end + 1):
-                    mask = imread(mask_file_names[time])
+                    if zarr_container is not None:
+                        mask = np.array(mask_array[0, time])
+                    else:
+                        mask = imread(mask_file_names[time])
                     if np.any(mask == id_):
                         daughter_parent_mapping[id_][0].append(time)
 
@@ -144,10 +172,10 @@ def create_csv(
     header_2d = "sequence id t y x parent_id original_id"
     header_3d = "sequence id t z y x parent_id original_id"
 
-    logger.info(f"Saving output CSVs to: {output_csv_file_name}")
+    logger.info(f"Saving output CSVs to: {detections_csv_file_name}")
     if len(mask.shape) == 2:
         np.savetxt(
-            output_csv_file_name,
+            detections_csv_file_name,
             np.array(all_data, dtype=object),
             delimiter=" ",
             header=header_2d,
@@ -155,7 +183,7 @@ def create_csv(
         )
     elif len(mask.shape) == 3:
         np.savetxt(
-            output_csv_file_name,
+            detections_csv_file_name,
             np.array(all_data, dtype=object),
             delimiter=" ",
             header=header_3d,
@@ -179,10 +207,11 @@ def main():
         config = yaml.safe_load(f)
 
     create_csv(
-        mask_dir_names=config.get("mask_dir_names"),
         sequence_names=config.get("sequence_names"),
         man_track_file_names=config.get("man_track_file_names"),
-        output_csv_file_name=config["output_csv_file_name"],
+        detections_csv_file_name=config["detections_csv_file_name"],
+        mask_dir_names=config.get("mask_dir_names"),
+        zarr_container=config.get("zarr_container"),
         unique_ids=config.get("unique_ids", True),
     )
 
