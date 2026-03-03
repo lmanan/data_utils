@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import zarr
@@ -102,39 +102,73 @@ def _relabel_block(
 def create_zarr(
     container_path: str,
     img_dir_names: List[str],
-    mask_dir_names: List[str],
     sequence_names: List[str],
-    mapping_csv_file_name: str,
+    mask_dir_names: Optional[List[str]] = None,
+    mapping_csv_file_name: Optional[str] = None,
     as_gray: bool = False,
 ) -> None:
     """
-    Create/update a Zarr with images and relabeled masks.
+    Create/update a Zarr with images and optionally relabeled masks.
 
-    mapping CSV columns expected (space-delimited):
-      sequence id t [z] y x parent_id original_id
-    - z is optional
-    - Only (t, original_id) are used for relabeling
+    Parameters
+    ----------
+    container_path : str
+        Path to the Zarr container to create or update.
+    img_dir_names : List[str]
+        Directories containing image files, one per sequence.
+    sequence_names : List[str]
+        Names for each sequence group in the Zarr container.
+    mask_dir_names : List[str], optional
+        Directories containing mask files, one per sequence. If None, no masks
+        are written and mapping_csv_file_name must also be None.
+    mapping_csv_file_name : str, optional
+        Path to a space-delimited CSV for relabeling masks. Expected columns:
+          sequence id t [z] y x parent_id original_id
+        z is optional. Only (t, original_id) are used for relabeling.
+        Must be None when mask_dir_names is None.
+    as_gray : bool, optional
+        If True, only the first channel of multi-channel images is used.
+        Defaults to False.
     """
-    assert len(img_dir_names) == len(mask_dir_names) == len(sequence_names)
+    if mask_dir_names is None:
+        assert mapping_csv_file_name is None, (
+            "mapping_csv_file_name must be None when mask_dir_names is None"
+        )
+    assert len(img_dir_names) == len(sequence_names)
+    if mask_dir_names is not None:
+        assert len(mask_dir_names) == len(sequence_names)
+
     container = zarr.open(container_path, mode="a")
 
     # Load mapping
-    mapping_all = _load_mapping(mapping_csv_file_name)
+    mapping_all = (
+        _load_mapping(mapping_csv_file_name)
+        if mapping_csv_file_name is not None
+        else None
+    )
+
+    mask_dir_names_iter = (
+        mask_dir_names if mask_dir_names is not None else [None] * len(sequence_names)
+    )
 
     for seq_name, img_dir_str, mask_dir_str in zip(
-        sequence_names, img_dir_names, mask_dir_names
+        sequence_names, img_dir_names, mask_dir_names_iter
     ):
         image_dir = Path(img_dir_str)
-        mask_dir = Path(mask_dir_str)
 
         image_fns = get_image_files(image_dir)
-        mask_fns = get_image_files(mask_dir)
-        if len(image_fns) != len(mask_fns):
-            logger.info(
-                f"Sequence '{seq_name}': #images ({len(image_fns)}) != #masks ({len(mask_fns)})"
-            )
-            logger.info(f"Using the first {len(mask_fns)} frames.")
-            image_fns = image_fns[: len(mask_fns)]
+
+        if mask_dir_str is not None:
+            mask_dir = Path(mask_dir_str)
+            mask_fns = get_image_files(mask_dir)
+            if len(image_fns) != len(mask_fns):
+                logger.info(
+                    f"Sequence '{seq_name}': #images ({len(image_fns)}) != #masks ({len(mask_fns)})"
+                )
+                logger.info(f"Using the first {len(mask_fns)} frames.")
+                image_fns = image_fns[: len(mask_fns)]
+        else:
+            mask_fns = None
 
         num_frames = len(image_fns)
         if num_frames == 0:
@@ -155,14 +189,6 @@ def create_zarr(
         zarr_shape = (num_channels, num_frames, *spatial_shape)
         axis_names = ("c", "t", *spatial_axes)
 
-        # Mask shape: single channel
-        mask_zarr_shape = (1, num_frames, *spatial_shape)
-
-        # Filter mapping for this sequence
-        mapping = mapping_all[mapping_all["sequence"] == seq_name]
-        logger.info("Sequence '%s': using %d mapping rows.", seq_name, len(mapping))
-        lookup = _build_lookup(mapping)
-
         # Create zarr datasets with original dtypes
         seq_grp = container.require_group(seq_name)
         img_ds = seq_grp.create_dataset(
@@ -172,62 +198,70 @@ def create_zarr(
             dtype=img_dtype,
             overwrite=True,
         )
-        mask_ds = seq_grp.create_dataset(
-            "mask",
-            shape=mask_zarr_shape,
-            chunks=(1, 1, *spatial_shape),
-            dtype=np.uint32,
-            overwrite=True,
-        )
+
+        if mask_fns is not None:
+            mask_zarr_shape = (1, num_frames, *spatial_shape)
+            mask_ds = seq_grp.create_dataset(
+                "mask",
+                shape=mask_zarr_shape,
+                chunks=(1, 1, *spatial_shape),
+                dtype=np.uint32,
+                overwrite=True,
+            )
+            mapping = mapping_all[mapping_all["sequence"] == seq_name]
+            logger.info("Sequence '%s': using %d mapping rows.", seq_name, len(mapping))
+            lookup = _build_lookup(mapping)
+        else:
+            mask_ds = None
+            lookup = None
 
         # Write frames one by one
         logger.info(f"Processing {num_frames} frames...")
         unique_labels_before = set()
         unique_labels_after = set()
 
-        for t, (im_fn, ma_fn) in enumerate(zip(image_fns, mask_fns)):
+        frame_iter = (
+            zip(image_fns, mask_fns)
+            if mask_fns is not None
+            else ((fn, None) for fn in image_fns)
+        )
+        for t, (im_fn, ma_fn) in enumerate(frame_iter):
             img = imread(im_fn)
             if as_gray and img.ndim == 3 and img.shape[-1] in (1, 3, 4):
                 img = img[..., 0]
-            mask = imread(ma_fn).astype(np.uint32)
 
             # Convert image to (C, [Z], Y, X) format
             img_cyx, _ = _to_cyx(img)
-
-            # Track unique labels before relabeling
-            unique_labels_before.update(np.unique(mask).tolist())
-
-            # Relabel mask
-            relabeled_mask = _relabel_block(mask, t, lookup)
-
-            # Track unique labels after relabeling
-            unique_labels_after.update(np.unique(relabeled_mask).tolist())
-
-            # Write to zarr
             img_ds[:, t] = img_cyx
-            mask_ds[0, t] = relabeled_mask
+
+            if ma_fn is not None:
+                mask = imread(ma_fn).astype(np.uint32)
+
+                # Track unique labels before relabeling
+                unique_labels_before.update(np.unique(mask).tolist())
+
+                # Relabel mask
+                relabeled_mask = _relabel_block(mask, t, lookup)
+
+                # Track unique labels after relabeling
+                unique_labels_after.update(np.unique(relabeled_mask).tolist())
+
+                mask_ds[0, t] = relabeled_mask
 
         # Set attributes
-        seq_grp["img"].attrs.update(
-            {
-                "resolution": (1,) * (len(axis_names) - 1),
-                "offset": (0,) * (len(axis_names) - 1),
-                "axis_names": axis_names,
-            }
-        )
-        seq_grp["mask"].attrs.update(
-            {
-                "resolution": (1,) * (len(axis_names) - 1),
-                "offset": (0,) * (len(axis_names) - 1),
-                "axis_names": axis_names,
-            }
-        )
-
-        logger.info(
-            "Sequence '%s': relabeled masks written. Unique labels: %d -> %d",
-            seq_name,
-            len(unique_labels_before),
-            len(unique_labels_after),
-        )
+        attrs = {
+            "resolution": (1,) * (len(axis_names) - 1),
+            "offset": (0,) * (len(axis_names) - 1),
+            "axis_names": axis_names,
+        }
+        seq_grp["img"].attrs.update(attrs)
+        if mask_ds is not None:
+            seq_grp["mask"].attrs.update(attrs)
+            logger.info(
+                "Sequence '%s': relabeled masks written. Unique labels: %d -> %d",
+                seq_name,
+                len(unique_labels_before),
+                len(unique_labels_after),
+            )
 
     logger.info("Created/updated container at %s.", container_path)
