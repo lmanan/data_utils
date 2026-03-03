@@ -150,7 +150,7 @@ def compute_alignment(
             logger.warning(
                 f"Camera {i}: first {s} frames have unstable PTP timestamps "
                 f"(clock still locking). Using frame {s} "
-                f"(PTP={pt[s]/1e9:.3f}s) as the sync reference."
+                f"(PTP={pt[s] / 1e9:.3f}s) as the sync reference."
             )
 
     common_start_ptp = max(int(pt[s]) for pt, s in zip(all_ptp_times, stable_idxs))
@@ -179,7 +179,7 @@ def compute_alignment(
         if error_ms > 0.5 * frame_period_ns / 1e6:  # more than half a frame off
             logger.warning(
                 f"Camera {i}: nearest frame to sync start is {error_ms:.2f}ms off "
-                f"(frame period = {frame_period_ns/1e6:.2f}ms). "
+                f"(frame period = {frame_period_ns / 1e6:.2f}ms). "
                 f"PTP jitter or dropped frame near sync boundary."
             )
         seek_frames.append(idx)
@@ -633,10 +633,10 @@ def main():
 
     for i, video in enumerate(args.video):
         group_name = args.group if args.group else _group_name_from_video(video)
-        logger.info(f"\n{'='*60}")
+        logger.info(f"\n{'=' * 60}")
         logger.info(f"Processing: {video} -> {args.zarr}/{group_name}/{DATASET_NAME}")
         logger.info(f"Timestamps: {args.timestamps[i]}")
-        logger.info(f"{'='*60}")
+        logger.info(f"{'=' * 60}")
         extract_frames(
             video,
             args.zarr,
