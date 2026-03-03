@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import zarr
 from skimage.io import imread
+from tqdm import tqdm
 
 from data_utils.image_utils import get_image_files
 
@@ -225,7 +226,9 @@ def create_zarr(
             if mask_fns is not None
             else ((fn, None) for fn in image_fns)
         )
-        for t, (im_fn, ma_fn) in enumerate(frame_iter):
+        for t, (im_fn, ma_fn) in enumerate(
+            tqdm(frame_iter, total=num_frames, desc=seq_name)
+        ):
             img = imread(im_fn)
             if as_gray and img.ndim == 3 and img.shape[-1] in (1, 3, 4):
                 img = img[..., 0]
