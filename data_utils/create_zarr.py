@@ -105,6 +105,7 @@ def create_zarr(
     mask_dir_names: List[str],
     sequence_names: List[str],
     mapping_csv_file_name: str,
+    as_gray: bool = False,
 ) -> None:
     """
     Create/update a Zarr with images and relabeled masks.
@@ -142,6 +143,8 @@ def create_zarr(
 
         # Read first frame to determine shape and dtype
         sample_img = imread(image_fns[0])
+        if as_gray and sample_img.ndim == 3 and sample_img.shape[-1] in (1, 3, 4):
+            sample_img = sample_img[..., 0]
         sample_img_cyx, spatial_axes = _to_cyx(sample_img)
 
         num_channels = sample_img_cyx.shape[0]
@@ -184,6 +187,8 @@ def create_zarr(
 
         for t, (im_fn, ma_fn) in enumerate(zip(image_fns, mask_fns)):
             img = imread(im_fn)
+            if as_gray and img.ndim == 3 and img.shape[-1] in (1, 3, 4):
+                img = img[..., 0]
             mask = imread(ma_fn).astype(np.uint32)
 
             # Convert image to (C, [Z], Y, X) format
