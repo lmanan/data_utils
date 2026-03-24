@@ -132,9 +132,9 @@ def create_zarr(
         Defaults to False.
     """
     if mask_dir_names is None:
-        assert (
-            mapping_csv_file_name is None
-        ), "mapping_csv_file_name must be None when mask_dir_names is None"
+        assert mapping_csv_file_name is None, (
+            "mapping_csv_file_name must be None when mask_dir_names is None"
+        )
     assert len(img_dir_names) == len(sequence_names)
     if mask_dir_names is not None:
         assert len(mask_dir_names) == len(sequence_names)

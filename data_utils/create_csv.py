@@ -62,9 +62,9 @@ def create_csv(
 
     """
 
-    assert (mask_dir_names is None) != (
-        zarr_container is None
-    ), "Exactly one of `mask_dir_names` or `zarr_container` must be provided."
+    assert (mask_dir_names is None) != (zarr_container is None), (
+        "Exactly one of `mask_dir_names` or `zarr_container` must be provided."
+    )
 
     if zarr_container is not None:
         import zarr
