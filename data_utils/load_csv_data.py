@@ -8,24 +8,31 @@ def load_csv_data(
     csv_file_name: str,
     voxel_size: Dict[str, float] | None = None,
     delimiter: str = " ",
-    sequences: list[str] | None = None,
+    groups: list[str] | None = None,
 ) -> Tuple[
-    npt.NDArray[np.float64], npt.NDArray[np.str_], dict[int, int], dict[str, int]
+    npt.NDArray[np.float64],
+    npt.NDArray[np.str_],
+    npt.NDArray[np.str_],
+    npt.NDArray[np.int32],
+    dict[int, int],
+    dict[str, int],
 ]:
     """
-    Load CSV data with scaling based on voxel size and optional sequence filtering.
+    Load CSV data with scaling based on voxel size and optional group filtering.
 
     Args:
         csv_file_name (str): Path to the CSV file.
         voxel_size (Dict[str, float]): Scaling factors for 'x', 'y', (optionally) 'z'.
         delimiter (str, optional): Delimiter used in the CSV. Defaults to ' '.
-        sequences (list[str] | None): Optional list of sequence names to keep.
-            If None, all sequences are returned.
+        groups (list[str] | None): Optional list of group names to keep.
+            If None, all groups are returned.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, dict[int, int], dict[str, int]]:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[int, int], dict[str, int]]:
             - Numerical data array with scaled coordinates
-            - Sequence column as ndarray[str]
+            - Group column as ndarray[str]
+            - Keypoint type column as ndarray[str] (defaults to 'centroid' if absent)
+            - Occluded column as ndarray[int32] (defaults to 0 if absent)
             - Mapping from id to original_id (if available)
             - Reverse mapping from "t_original_id" to id
     """
@@ -44,11 +51,13 @@ def load_csv_data(
 
     # Define expected columns and their types
     expected_cols = [
-        ("sequence", "U20"),  # force Unicode string
+        ("group", "U20"),  # force Unicode string
         ("id", "i4"),
         ("t", "i4"),
         ("y", "f8"),
         ("x", "f8"),
+        ("keypoint_type", "U20"),
+        ("occluded", "i4"),
         ("parent_id", "i4"),
         ("original_id", "i4"),
     ]
@@ -74,8 +83,8 @@ def load_csv_data(
         comments=None,  # Disable comment handling to support headers starting with #
     )
 
-    if sequences is not None:
-        data = data[np.isin(data["sequence"], sequences)]
+    if groups is not None:
+        data = data[np.isin(data["group"], groups)]
 
     # Extract column names safely
     colnames = (
@@ -106,7 +115,18 @@ def load_csv_data(
         else:
             numeric_arrays.append(data[col])
     numerical_data = np.column_stack(numeric_arrays)
-    sequence_data = data["sequence"]
+    group_data = data["group"]
+
+    # Handle missing keypoint_type and occluded columns
+    if has_names and "keypoint_type" in colnames:
+        keypoint_type_data = data["keypoint_type"]
+    else:
+        keypoint_type_data = np.full(len(data), "centroid", dtype="U20")
+
+    if has_names and "occluded" in colnames:
+        occluded_data = data["occluded"].astype(np.int32)
+    else:
+        occluded_data = np.zeros(len(data), dtype=np.int32)
 
     # Mapping from id to original_id (if exists)
     if has_names and "original_id" in colnames:
@@ -122,4 +142,11 @@ def load_csv_data(
         mapping = {}
         reverse_mapping = {}
 
-    return numerical_data, sequence_data, mapping, reverse_mapping
+    return (
+        numerical_data,
+        group_data,
+        keypoint_type_data,
+        occluded_data,
+        mapping,
+        reverse_mapping,
+    )
