@@ -43,18 +43,29 @@ def load_tracklet_csv_node_attribute(
     else:
         attr_cols = [h for h in header if h.startswith(f"{attribute_prefix}_")]
 
+    time_col = next((name for name in header if name in ("time", "t")), None)
+    fixed_cols = ["tracklet_id"] + ([time_col] if time_col else []) + ["k"]
+    col_names = fixed_cols + attr_cols
+    usecols = [header.index(name) for name in col_names]
+
     float_fields = [(name, "f8") for name in attr_cols]
-    dtype = np.dtype(
-        [("tracklet_id", "i8"), ("time", "i8"), ("k", "i8")] + float_fields
+    fixed_fields = (
+        [("tracklet_id", "i8")]
+        + ([(time_col, "i8")] if time_col else [])
+        + [("k", "i8")]
     )
+    dtype = np.dtype(fixed_fields + float_fields)
 
     data = np.genfromtxt(
         node_attribute_file_name,
         delimiter=delimiter,
-        names=True,
+        skip_header=1,
+        names=col_names,
         dtype=dtype,
+        usecols=usecols,
         encoding="utf-8",
         autostrip=True,
+        comments=None,
     )
 
     return data
