@@ -51,26 +51,30 @@ def save_tracklet_csv_data(
             node = children[0] if children else None
 
     tracklet_data = load_tracklet_csv_data(csv_path)
-    kp_y_fields = [f for f in tracklet_data.dtype.names if f.startswith("kp") and f.endswith("_y")]
-    kp_x_fields = [f for f in tracklet_data.dtype.names if f.startswith("kp") and f.endswith("_x")]
+    kp_y_fields = [
+        f for f in tracklet_data.dtype.names if f.startswith("kp") and f.endswith("_y")
+    ]
+    kp_x_fields = [
+        f for f in tracklet_data.dtype.names if f.startswith("kp") and f.endswith("_x")
+    ]
 
     sel_mask = np.isin(tracklet_data["tracklet_id"], list(solution_graph.nodes()))
     det = tracklet_data[sel_mask]
 
     time_col = next(name for name in tracklet_data.dtype.names if name in ("time", "t"))
     chain_ids = np.array([tracklet_chain_id[int(tid)] for tid in det["tracklet_id"]])
-    orders    = np.array([tracklet_order[int(tid)]    for tid in det["tracklet_id"]])
-    times     = det[time_col]
-    ys        = np.stack([det[f] for f in kp_y_fields], axis=1).mean(axis=1)
-    xs        = np.stack([det[f] for f in kp_x_fields], axis=1).mean(axis=1)
+    orders = np.array([tracklet_order[int(tid)] for tid in det["tracklet_id"]])
+    times = det[time_col]
+    ys = np.stack([det[f] for f in kp_y_fields], axis=1).mean(axis=1)
+    xs = np.stack([det[f] for f in kp_x_fields], axis=1).mean(axis=1)
 
-    sort_idx  = np.lexsort((times, orders, chain_ids))
+    sort_idx = np.lexsort((times, orders, chain_ids))
     chain_ids = chain_ids[sort_idx]
-    times     = times[sort_idx]
-    ys        = ys[sort_idx]
-    xs        = xs[sort_idx]
+    times = times[sort_idx]
+    ys = ys[sort_idx]
+    xs = xs[sort_idx]
 
-    n   = len(times)
+    n = len(times)
     ids = np.arange(1, n + 1)
     parent_ids = np.zeros(n, dtype=np.int64)
     prev_id: dict = {}
