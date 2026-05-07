@@ -12,12 +12,12 @@ def save_tracklet_csv_data(
     solution_graph,
     csv_path: str,
     out_path: str | Path,
-    sequence: str = "sequence",
+    group: str = "group",
 ) -> None:
     """
     Export a detection-level centroid CSV from a solution graph.
 
-    The output file has columns: sequence id t y x parent_id
+    The output file has columns: group id t y x parent_id
 
     Centroid coordinates are computed as the mean over all keypoint (kp*_y,
     kp*_x) columns in the tracklet CSV.  Detections belonging to the same
@@ -30,7 +30,7 @@ def save_tracklet_csv_data(
             and whose edges represent links between consecutive tracklets.
         csv_path: Path to the tracklet CSV file (space-delimited, with header).
         out_path: Destination path for the output CSV file.
-        sequence: Sequence name written into the ``sequence`` column.
+        group: Sequence name written into the ``group`` column.
     """
     # Walk chains; assign each tracklet its (chain_id, order_in_chain).
     # Sorting by (chain_id, order_in_chain, t) rather than just (chain_id, t)
@@ -87,10 +87,10 @@ def save_tracklet_csv_data(
     out_path = Path(out_path)
     out_path.parent.mkdir(exist_ok=True, parents=True)
     with open(out_path, "w") as f:
-        f.write("sequence id t y x parent_id\n")
+        f.write("group id t y x parent_id\n")
         for i in range(n):
             f.write(
-                f"{sequence} {ids[i]} {times[i]}"
+                f"{group} {ids[i]} {times[i]}"
                 f" {ys[i]:.4f} {xs[i]:.4f} {parent_ids[i]}\n"
             )
     logger.info("Exported %s (%d detections, %d chains)", out_path, n, len(roots))

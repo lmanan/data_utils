@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_csv(
-    sequence_names: List[str],
+    group_names: List[str],
     detections_csv_file_name: str,
     mask_dir_names: Optional[List[str]] = None,
     zarr_container: Optional[str] = None,
@@ -34,27 +34,27 @@ def create_csv(
     `man_track.txt`.
 
     The CSV file provides an ID for each segmentation, with 7 or 8 columns:
-    `sequence id time [z] y x parent_id original_id`.
+    `group id time [z] y x parent_id original_id`.
 
     Masks can be provided either as image directories (via `mask_dir_names`) or
     as a zarr container (via `zarr_container`). Exactly one must be specified.
 
     Parameters
     ----------
-    sequence_names : List[str]
-        List of sequence names corresponding to each mask directory.
+    group_names : List[str]
+        List of group names corresponding to each mask directory.
         When using `zarr_container`, these are the group names within the container.
     man_track_file_names : List[str] | None
         TXT files with CTC-style 4 columns (track_id time_start time_end parent_track_id).
         If not provided, parent id will be set to -1.
     detections_csv_file_name : str
         Output CSV filename with segmentation IDs and parent IDs.
-        Columns are [sequence id t [z] y x parent_id original_id].
+        Columns are [group id t [z] y x parent_id original_id].
     mask_dir_names : List[str] | None
         List of directories containing segmentation masks.
         Supported formats: tif, tiff, png, jpg, jpeg.
     zarr_container : str | None
-        Path to a zarr container. Each `sequence_name` is a group within the
+        Path to a zarr container. Each `group_name` is a group within the
         container, and each group must contain a dataset called 'mask'.
     unique_ids : bool
         If True, assigns unique IDs across the entire dataset (starting from 1).
@@ -62,9 +62,9 @@ def create_csv(
 
     """
 
-    assert (mask_dir_names is None) != (zarr_container is None), (
-        "Exactly one of `mask_dir_names` or `zarr_container` must be provided."
-    )
+    assert (mask_dir_names is None) != (
+        zarr_container is None
+    ), "Exactly one of `mask_dir_names` or `zarr_container` must be provided."
 
     if zarr_container is not None:
         import zarr
@@ -72,11 +72,11 @@ def create_csv(
         store = zarr.open(zarr_container, mode="r")
 
     all_data: List[List[Union[str, int, float]]] = []
-    for seq_index in range(len(sequence_names)):
-        sequence_name = sequence_names[seq_index]
+    for seq_index in range(len(group_names)):
+        group_name = group_names[seq_index]
 
         if zarr_container is not None:
-            mask_array = store[sequence_name]["mask"]
+            mask_array = store[group_name]["mask"]
             num_frames = mask_array.shape[1]
         else:
             mask_dir_name = mask_dir_names[seq_index]
@@ -149,7 +149,7 @@ def create_csv(
                         parent_id_updated = mapping[time_parent][key][0]
                     all_data.append(
                         [
-                            sequence_name,
+                            group_name,
                             value[0],
                             time,
                             *value[1:],
@@ -160,7 +160,7 @@ def create_csv(
                 else:
                     all_data.append(
                         [
-                            sequence_name,
+                            group_name,
                             value[0],
                             time,
                             *value[1:],
@@ -169,8 +169,8 @@ def create_csv(
                         ]
                     )
 
-    header_2d = "sequence id t y x parent_id original_id"
-    header_3d = "sequence id t z y x parent_id original_id"
+    header_2d = "group id t y x parent_id original_id"
+    header_3d = "group id t z y x parent_id original_id"
 
     logger.info(f"Saving output CSVs to: {detections_csv_file_name}")
     if len(mask.shape) == 2:
@@ -207,7 +207,7 @@ def main():
         config = yaml.safe_load(f)
 
     create_csv(
-        sequence_names=config.get("sequence_names"),
+        group_names=config.get("group_names"),
         man_track_file_names=config.get("man_track_file_names"),
         detections_csv_file_name=config["detections_csv_file_name"],
         mask_dir_names=config.get("mask_dir_names"),

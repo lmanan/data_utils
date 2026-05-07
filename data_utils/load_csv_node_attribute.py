@@ -6,11 +6,11 @@ def load_csv_node_attribute(
     attribute_name: str = None,
     attribute_prefix: str = None,
     delimiter=" ",
-    sequences=None,
+    groups=None,
 ):
-    """Load node attribute CSV and optionally filter by one or more sequences.
+    """Load node attribute CSV and optionally filter by one or more groups.
 
-    The CSV file should have columns: sequence, id, t, followed by attribute columns.
+    The CSV file should have columns: group, id, t, followed by attribute columns.
 
     Two use cases:
         1. Single attribute: provide `attribute_name` (e.g., 'pin') to read that column.
@@ -24,13 +24,13 @@ def load_csv_node_attribute(
         attribute_prefix (str | None): Prefix for columns to read (e.g., 'emb' reads emb_*).
             Mutually exclusive with attribute_name.
         delimiter (str): Field delimiter. Defaults to ' '.
-        sequences (list[str] | None): List of sequence names to keep.
-            If None, all sequences are returned.
+        groups (list[str] | None): List of group names to keep.
+            If None, all groups are returned.
 
     Returns:
         tuple[np.ndarray, np.ndarray]:
             - node_attribute_data: Structured array with columns (id, t, <attributes>).
-            - sequence_data: 1D array of sequence names (dtype str).
+            - group_data: 1D array of group names (dtype str).
 
     Raises:
         ValueError: If neither or both attribute_name and attribute_prefix are provided.
@@ -49,7 +49,7 @@ def load_csv_node_attribute(
         attr_cols = [h for h in header if h.startswith(f"{attribute_prefix}_")]
 
     float_fields = [(name, "f8") for name in attr_cols]
-    dtype = np.dtype([("sequence", "U20"), ("id", "i8"), ("t", "i8")] + float_fields)
+    dtype = np.dtype([("group", "U20"), ("id", "i8"), ("t", "i8")] + float_fields)
 
     node_attribute_data = np.genfromtxt(
         node_attribute_file_name,
@@ -60,19 +60,19 @@ def load_csv_node_attribute(
         autostrip=True,
     )
 
-    if sequences is not None:
+    if groups is not None:
         node_attribute_data = node_attribute_data[
-            np.isin(node_attribute_data["sequence"], sequences)
+            np.isin(node_attribute_data["group"], groups)
         ]
 
-    # extract sequence data as string array
-    sequence_data = np.asarray(node_attribute_data["sequence"], dtype=str)
+    # extract group data as string array
+    group_data = np.asarray(node_attribute_data["group"], dtype=str)
 
-    # remove sequence column from node_attribute_data
+    # remove group column from node_attribute_data
     new_dtype = np.dtype([("id", "i8"), ("t", "i8")] + float_fields)
     node_attribute_data = np.array(
         [tuple(row[field] for field in new_dtype.names) for row in node_attribute_data],
         dtype=new_dtype,
     )
 
-    return node_attribute_data, sequence_data
+    return node_attribute_data, group_data

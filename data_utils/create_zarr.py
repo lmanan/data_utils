@@ -53,7 +53,7 @@ def _load_mapping(mapping_csv_file_name: str) -> np.ndarray:
         header = f.readline().strip().split()  # space-delimited
 
     dtype = [
-        ("sequence", "U50"),
+        ("group", "U50"),
         ("id", "i8"),
         ("t", "i8"),
         ("y", "f8"),
@@ -103,7 +103,7 @@ def _relabel_block(
 def create_zarr(
     container_path: str,
     img_dir_names: List[str],
-    sequence_names: List[str],
+    group_names: List[str],
     mask_dir_names: Optional[List[str]] = None,
     mapping_csv_file_name: Optional[str] = None,
     as_gray: bool = False,
@@ -116,15 +116,15 @@ def create_zarr(
     container_path : str
         Path to the Zarr container to create or update.
     img_dir_names : List[str]
-        Directories containing image files, one per sequence.
-    sequence_names : List[str]
-        Names for each sequence group in the Zarr container.
+        Directories containing image files, one per group.
+    group_names : List[str]
+        Names for each group group in the Zarr container.
     mask_dir_names : List[str], optional
-        Directories containing mask files, one per sequence. If None, no masks
+        Directories containing mask files, one per group. If None, no masks
         are written and mapping_csv_file_name must also be None.
     mapping_csv_file_name : str, optional
         Path to a space-delimited CSV for relabeling masks. Expected columns:
-          sequence id t [z] y x parent_id original_id
+          group id t [z] y x parent_id original_id
         z is optional. Only (t, original_id) are used for relabeling.
         Must be None when mask_dir_names is None.
     as_gray : bool, optional
@@ -132,12 +132,12 @@ def create_zarr(
         Defaults to False.
     """
     if mask_dir_names is None:
-        assert mapping_csv_file_name is None, (
-            "mapping_csv_file_name must be None when mask_dir_names is None"
-        )
-    assert len(img_dir_names) == len(sequence_names)
+        assert (
+            mapping_csv_file_name is None
+        ), "mapping_csv_file_name must be None when mask_dir_names is None"
+    assert len(img_dir_names) == len(group_names)
     if mask_dir_names is not None:
-        assert len(mask_dir_names) == len(sequence_names)
+        assert len(mask_dir_names) == len(group_names)
 
     container = zarr.open(container_path, mode="a")
 
@@ -149,11 +149,11 @@ def create_zarr(
     )
 
     mask_dir_names_iter = (
-        mask_dir_names if mask_dir_names is not None else [None] * len(sequence_names)
+        mask_dir_names if mask_dir_names is not None else [None] * len(group_names)
     )
 
     for seq_name, img_dir_str, mask_dir_str in zip(
-        sequence_names, img_dir_names, mask_dir_names_iter
+        group_names, img_dir_names, mask_dir_names_iter
     ):
         image_dir = Path(img_dir_str)
 
@@ -209,7 +209,7 @@ def create_zarr(
                 dtype=np.uint32,
                 overwrite=True,
             )
-            mapping = mapping_all[mapping_all["sequence"] == seq_name]
+            mapping = mapping_all[mapping_all["group"] == seq_name]
             logger.info("Sequence '%s': using %d mapping rows.", seq_name, len(mapping))
             lookup = _build_lookup(mapping)
         else:
