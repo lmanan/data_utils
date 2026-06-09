@@ -10,17 +10,13 @@ def load_tracklet_csv_data(
     """
     Load tracklet keypoint data from a space-delimited CSV file.
 
-    The file is expected to have a header row with columns:
-        tracklet_id  time  kp0_y  kp0_x  kp1_y  kp1_x  ...  kpN_y  kpN_x
-
-    The number of keypoints is inferred automatically from the header.
-
-    Args:
-        csv_file_name (str): Path to the CSV file.
-        delimiter (str): Delimiter used in the file. Defaults to ' '.
+    Accepts both the minimal format (tracklet_id, time/t, kp*) and the full
+    detection format (group, id, t, y, x, parent_id, tracklet_id, kp*). Extra
+    columns are silently ignored; only tracklet_id, the time column, and all
+    kp{i}_y / kp{i}_x columns are returned.
 
     Returns:
-        np.ndarray: Structured array with columns (tracklet_id, time, kp0_y, kp0_x, ..., kpN_y, kpN_x).
+        np.ndarray: Structured array with fields (tracklet_id, t/time, kp0_y, kp0_x, ...).
     """
     with open(csv_file_name, "r", encoding="utf-8") as f:
         header_line = f.readline().strip()
@@ -38,16 +34,30 @@ def load_tracklet_csv_data(
             "No keypoint columns found. Expected columns named kp0_y, kp0_x, kp1_y, kp1_x, ..."
         )
 
-    kp_fields = [(name, "f8") for name in kp_col_names]
-    dtype = np.dtype([("tracklet_id", "i8"), ("time", "i8")] + kp_fields)
+    time_col = next((name for name in header if name in ("t", "time")), None)
+    if time_col is None:
+        raise ValueError("No time column found. Expected 't' or 'time'.")
 
-    data = np.genfromtxt(
+    if "tracklet_id" not in header:
+        raise ValueError("No 'tracklet_id' column found.")
+
+    optional_int_cols = {"id", "parent_id"}
+    wanted = {"tracklet_id", time_col} | set(kp_col_names) | (optional_int_cols & set(header))
+    usecols = [i for i, name in enumerate(header) if name in wanted]
+    col_names = [header[i] for i in usecols]
+
+    type_for = {"tracklet_id": "i8", time_col: "i8", "id": "i8", "parent_id": "i8"}
+    for name in kp_col_names:
+        type_for[name] = "f8"
+    dtype = [(name, type_for[name]) for name in col_names]
+
+    return np.genfromtxt(
         csv_file_name,
         delimiter=delimiter,
-        names=True,
+        skip_header=1,
+        names=col_names,
         dtype=dtype,
         encoding="utf-8",
-        autostrip=True,
+        usecols=usecols,
+        comments=None,
     )
-
-    return data

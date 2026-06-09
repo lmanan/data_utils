@@ -16,6 +16,7 @@ def load_csv_data(
     npt.NDArray[np.int32],
     dict[int, int],
     dict[str, int],
+    npt.NDArray[np.int64],
 ]:
     """
     Load CSV data with scaling based on voxel size and optional group filtering.
@@ -28,13 +29,14 @@ def load_csv_data(
             If None, all groups are returned.
 
     Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[int, int], dict[str, int]]:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[int, int], dict[str, int], np.ndarray]:
             - Numerical data array with scaled coordinates
             - Group column as ndarray[str]
             - Keypoint type column as ndarray[str] (defaults to 'centroid' if absent)
             - Occluded column as ndarray[int32] (defaults to 0 if absent)
             - Mapping from id to original_id (if available)
             - Reverse mapping from "t_original_id" to id
+            - tracklet_id column as ndarray[int64] (zeros if column absent)
     """
     if voxel_size is None:
         voxel_size = {"x": 1.0, "y": 1.0}
@@ -51,7 +53,7 @@ def load_csv_data(
 
     # Define expected columns and their types
     expected_cols = [
-        ("group", "U20"),  # force Unicode string
+        ("group", "U64"),  # force Unicode string
         ("id", "i4"),
         ("t", "i4"),
         ("y", "f8"),
@@ -60,17 +62,19 @@ def load_csv_data(
         ("occluded", "i4"),
         ("parent_id", "i4"),
         ("original_id", "i4"),
+        ("tracklet_id", "i8"),
     ]
     if "z" in header:
         expected_cols.insert(3, ("z", "f8"))
 
-    # Filter to only columns that exist in the file, preserving order
-    expected_names = [col[0] for col in expected_cols]
-    usecols = [i for i, name in enumerate(header) if name in expected_names]
-    dtype = [col for col in expected_cols if col[0] in header]
-
-    # Extract column names from dtype for explicit naming
-    col_names = [col[0] for col in dtype]
+    # Build usecols, dtype, and col_names all in file-header order so that
+    # genfromtxt's positional mapping (usecols[i] → col_names[i]) is correct.
+    # Building dtype from expected_cols order (as before) caused silent value
+    # swaps when the file's column order differed from expected_cols order.
+    expected_cols_dict = dict(expected_cols)
+    usecols   = [i for i, name in enumerate(header) if name in expected_cols_dict]
+    dtype     = [(name, expected_cols_dict[name]) for name in header if name in expected_cols_dict]
+    col_names = [name for name in header if name in expected_cols_dict]
 
     data = np.genfromtxt(
         csv_file_name,
@@ -142,6 +146,11 @@ def load_csv_data(
         mapping = {}
         reverse_mapping = {}
 
+    if has_names and "tracklet_id" in colnames:
+        tracklet_id_data = data["tracklet_id"].astype(np.int64)
+    else:
+        tracklet_id_data = np.zeros(len(data), dtype=np.int64)
+
     return (
         numerical_data,
         group_data,
@@ -149,4 +158,5 @@ def load_csv_data(
         occluded_data,
         mapping,
         reverse_mapping,
+        tracklet_id_data,
     )

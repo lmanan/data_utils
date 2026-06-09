@@ -1,5 +1,11 @@
 import numpy as np
 
+# Columns that index a row rather than carry an attribute value. The embeddings
+# CSV may be keyed by detection `id` (current) or by `tracklet_id` (legacy);
+# `k` (sampled-detection index) and the time column are optional. Whichever of
+# these are present are loaded so the caller can join on the one it needs.
+META_COLS = ("tracklet_id", "id", "time", "t", "k")
+
 
 def load_tracklet_csv_node_attribute(
     node_attribute_file_name: str,
@@ -9,9 +15,10 @@ def load_tracklet_csv_node_attribute(
 ):
     """Load tracklet node attribute CSV.
 
-    The CSV file should have columns: tracklet_id, time, k, followed by attribute columns.
-    k is an integer (1–25) indicating which sampled detection within the tracklet each row
-    corresponds to.
+    Recognised index columns (any subset, in file order): tracklet_id, id,
+    time/t, k. At least one of `id` or `tracklet_id` is expected so the caller
+    can associate each row with a tracklet. These are followed by attribute
+    columns.
 
     Two use cases:
         1. Single attribute: provide `attribute_name` (e.g., 'score') to read that column.
@@ -27,7 +34,8 @@ def load_tracklet_csv_node_attribute(
         delimiter (str): Field delimiter. Defaults to ' '.
 
     Returns:
-        np.ndarray: Structured array with columns (tracklet_id, time, k, <attributes>).
+        np.ndarray: Structured array whose leading fields are whichever of
+        META_COLS are present, followed by the requested attribute columns.
 
     Raises:
         ValueError: If neither or both attribute_name and attribute_prefix are provided.
@@ -43,18 +51,13 @@ def load_tracklet_csv_node_attribute(
     else:
         attr_cols = [h for h in header if h.startswith(f"{attribute_prefix}_")]
 
-    time_col = next((name for name in header if name in ("time", "t")), None)
-    fixed_cols = ["tracklet_id"] + ([time_col] if time_col else []) + ["k"]
-    col_names = fixed_cols + attr_cols
+    meta_cols = [h for h in header if h in META_COLS]
+    col_names = meta_cols + attr_cols
     usecols = [header.index(name) for name in col_names]
 
+    int_fields = [(name, "i8") for name in meta_cols]
     float_fields = [(name, "f8") for name in attr_cols]
-    fixed_fields = (
-        [("tracklet_id", "i8")]
-        + ([(time_col, "i8")] if time_col else [])
-        + [("k", "i8")]
-    )
-    dtype = np.dtype(fixed_fields + float_fields)
+    dtype = np.dtype(int_fields + float_fields)
 
     data = np.genfromtxt(
         node_attribute_file_name,
