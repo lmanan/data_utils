@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import zarr
+from numcodecs import Blosc
 from skimage.io import imread
 from tqdm import tqdm
 
@@ -11,6 +12,9 @@ from data_utils.image_utils import get_image_files
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+DEFAULT_COMPRESSOR = Blosc(cname="zstd", clevel=7, shuffle=Blosc.BITSHUFFLE)
+DEFAULT_SPATIAL_CHUNKS = {2: (256, 256), 3: (64, 256, 256)}
 
 
 def _to_cyx(img: np.ndarray) -> tuple[np.ndarray, tuple[str, ...]]:
@@ -100,6 +104,54 @@ def _relabel_block(
     return dst
 
 
+def _resolve_chunks(
+    spatial_shape: Tuple[int, ...], spatial_chunks: Optional[Tuple[int, ...]]
+) -> Tuple[int, ...]:
+    """Chunk shape (1, 1, *spatial), clipped to the array's spatial extent."""
+    if spatial_chunks is None:
+        spatial_chunks = DEFAULT_SPATIAL_CHUNKS[len(spatial_shape)]
+    if len(spatial_chunks) != len(spatial_shape):
+        raise ValueError(
+            f"spatial_chunks {spatial_chunks} does not match spatial shape {spatial_shape}"
+        )
+    return (1, 1, *(min(c, s) for c, s in zip(spatial_chunks, spatial_shape)))
+
+
+def _build_attrs(
+    axis_names: Tuple[str, ...],
+    voxel_size_um: Optional[Tuple[float, ...]],
+    time_resolution_s: float,
+) -> dict:
+    """Attributes for a (c, t, [z], y, x) dataset: spatial units in nm, time in s.
+
+    Without a voxel size, ``units`` is omitted rather than guessed: consumers
+    (e.g. visualizer.read_axis_metadata) then treat the axes as dimensionless
+    voxel/frame indices with resolution 1, which is the truth for such a dataset.
+    """
+    spatial_axes = axis_names[2:]
+    n = len(spatial_axes)
+
+    if voxel_size_um is None:
+        return {
+            "axis_names": list(axis_names),
+            "resolution": [1.0] * (n + 1),
+            "offset": [0] * (n + 1),
+        }
+
+    if len(voxel_size_um) != n:
+        raise ValueError(
+            f"voxel_size_um {voxel_size_um} does not match spatial axes {spatial_axes}"
+        )
+    return {
+        "axis_names": list(axis_names),
+        "resolution": [time_resolution_s, *(v * 1000.0 for v in voxel_size_um)],
+        "offset": [0] * (n + 1),
+        "units": ["s", *("nm",) * n],
+        "voxel_size_um": list(voxel_size_um),
+        "time_resolution_s": time_resolution_s,
+    }
+
+
 def create_zarr(
     container_path: str,
     img_dir_names: List[str],
@@ -107,6 +159,10 @@ def create_zarr(
     mask_dir_names: Optional[List[str]] = None,
     mapping_csv_file_name: Optional[str] = None,
     as_gray: bool = False,
+    voxel_size_um: Optional[Tuple[float, ...]] = None,
+    time_resolution_s: float = 1.0,
+    spatial_chunks: Optional[Tuple[int, ...]] = None,
+    compressor: Optional[Blosc] = DEFAULT_COMPRESSOR,
 ) -> None:
     """
     Create/update a Zarr with images and optionally relabeled masks.
@@ -130,6 +186,19 @@ def create_zarr(
     as_gray : bool, optional
         If True, only the first channel of multi-channel images is used.
         Defaults to False.
+    voxel_size_um : Tuple[float, ...], optional
+        Physical voxel size in micrometers, ordered as the spatial axes
+        ((z, y, x) or (y, x)). When given, 'resolution' is written in nm and
+        'units' as ["s", "nm", ...]. When None (default), the dataset is left
+        dimensionless: resolution 1 per axis and no 'units' attribute.
+    time_resolution_s : float, optional
+        Seconds between frames. Defaults to 1.0. Only written when
+        voxel_size_um is given.
+    spatial_chunks : Tuple[int, ...], optional
+        Chunk shape along the spatial axes; clipped to the array extent.
+        Defaults to (64, 256, 256) in 3D and (256, 256) in 2D.
+    compressor : Blosc, optional
+        Defaults to Blosc zstd, clevel 7, bitshuffle. Pass None to disable.
     """
     if mask_dir_names is None:
         assert (
@@ -190,13 +259,16 @@ def create_zarr(
         zarr_shape = (num_channels, num_frames, *spatial_shape)
         axis_names = ("c", "t", *spatial_axes)
 
+        chunks = _resolve_chunks(spatial_shape, spatial_chunks)
+
         # Create zarr datasets with original dtypes
         seq_grp = container.require_group(seq_name)
         img_ds = seq_grp.create_dataset(
             "img",
             shape=zarr_shape,
-            chunks=(1, 1, *spatial_shape),
+            chunks=chunks,
             dtype=img_dtype,
+            compressor=compressor,
             overwrite=True,
         )
 
@@ -205,8 +277,9 @@ def create_zarr(
             mask_ds = seq_grp.create_dataset(
                 "mask",
                 shape=mask_zarr_shape,
-                chunks=(1, 1, *spatial_shape),
+                chunks=chunks,
                 dtype=np.uint32,
+                compressor=compressor,
                 overwrite=True,
             )
             mapping = mapping_all[mapping_all["group"] == seq_name]
@@ -252,11 +325,7 @@ def create_zarr(
                 mask_ds[0, t] = relabeled_mask
 
         # Set attributes
-        attrs = {
-            "resolution": (1,) * (len(axis_names) - 1),
-            "offset": (0,) * (len(axis_names) - 1),
-            "axis_names": axis_names,
-        }
+        attrs = _build_attrs(axis_names, voxel_size_um, time_resolution_s)
         seq_grp["img"].attrs.update(attrs)
         if mask_ds is not None:
             seq_grp["mask"].attrs.update(attrs)

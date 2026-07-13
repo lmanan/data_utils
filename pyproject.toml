@@ -16,6 +16,7 @@ dependencies = [
     "requests",
     "pyyaml",
     "zarr",
+    "numcodecs",
     "scikit-image",
     "tqdm",
     "imagecodecs" # loading CTC data
